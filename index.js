@@ -4,7 +4,6 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
-const Redis = require("ioredis");
 const Parser = require("rss-parser");
 const { z } = require("zod");
 
@@ -24,14 +23,6 @@ if (!process.env.DATABASE_URL) {
 }
 const pg = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// Redis (optional)
-let redis = null;
-if (process.env.REDIS_URL) {
-    redis = new Redis(process.env.REDIS_URL, {
-        maxRetriesPerRequest: 2,
-        enableReadyCheck: false,
-    });
-}
 
 // RSS parser
 const parser = new Parser({
@@ -111,19 +102,12 @@ function pickImage(item) {
 app.get("/health", async (req, res) => {
     // Basic dependency checks without hammering
     let dbOk = false;
+
     try {
         await pg.query("select 1 as ok");
         dbOk = true;
-    } catch (e) { }
-
-    let redisOk = null;
-    if (redis) {
-        try {
-            const pong = await redis.ping();
-            redisOk = pong === "PONG";
-        } catch (e) {
-            redisOk = false;
-        }
+    } catch (e) {
+        dbOk = false;
     }
 
     res.json({
@@ -131,8 +115,7 @@ app.get("/health", async (req, res) => {
         service: "blockbeatnews-api",
         version: VERSION,
         time: new Date().toISOString(),
-        db: dbOk,
-        redis: redisOk,
+        db: dbOk
     });
 });
 
