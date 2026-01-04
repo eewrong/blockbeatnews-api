@@ -37,7 +37,21 @@ app.get("/v1/articles", async (req, res) => {
         const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
         const category = req.query.category;
 
-        if (category) {
+        // Frontend slug -> DB slug
+        const slugMap = {
+            "market-news": "markets",
+            "nft-news": "nfts",
+            "crypto-currents": "altcoins",
+            "defi-and-dapps": "defi",
+            "regulation-policy": "regulation",
+            "ai-insights": "ai-crypto",
+            "web3": "builders",
+            "blockchain": "builders",
+        };
+
+        const resolvedCategory = category ? (slugMap[category] || category) : null;
+
+        if (resolvedCategory) {
             const { rows } = await pool.query(
                 `
         SELECT
@@ -54,7 +68,7 @@ app.get("/v1/articles", async (req, res) => {
         ORDER BY COALESCE(a.published_at, a.created_at) DESC
         LIMIT $2
         `,
-                [category, limit]
+                [resolvedCategory, limit]
             );
             return res.json({ ok: true, items: rows });
         }
@@ -79,38 +93,6 @@ app.get("/v1/articles", async (req, res) => {
         return res.json({ ok: true, items: rows });
     } catch (err) {
         console.error("GET /v1/articles failed", err);
-        return res.status(500).json({ ok: false, error: "server_error" });
-    }
-});
-
-// Optional: category alias endpoint (matches your frontend expectation if it calls /v1/articles?category=markets)
-app.get("/v1/articles/by-category/:slug", async (req, res) => {
-    try {
-        const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
-        const slug = req.params.slug;
-
-        const { rows } = await pool.query(
-            `
-      SELECT
-        a.id,
-        a.title,
-        a.canonical_url,
-        a.published_at,
-        a.created_at,
-        s.name AS source_name
-      FROM articles a
-      JOIN sources s ON s.id = a.source_id
-      JOIN categories c ON c.id = s.category_id
-      WHERE c.slug = $1
-      ORDER BY COALESCE(a.published_at, a.created_at) DESC
-      LIMIT $2
-      `,
-            [slug, limit]
-        );
-
-        return res.json({ ok: true, items: rows });
-    } catch (err) {
-        console.error("GET /v1/articles/by-category failed", err);
         return res.status(500).json({ ok: false, error: "server_error" });
     }
 });
