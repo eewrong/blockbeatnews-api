@@ -2,6 +2,9 @@
 const cors = require("cors");
 const pg = require("pg");
 require("dotenv").config();
+const redis = require("./lib/redis");
+const rateLimit = require("express-rate-limit");
+
 
 const app = express();
 
@@ -19,6 +22,13 @@ app.use(
 );
 
 app.use(express.json());
+const publicLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 
 const PORT = process.env.PORT || 10000;
 
@@ -28,28 +38,65 @@ const pool = new pg.Pool({
     ssl: { rejectUnauthorized: false },
 });
 
-app.get("/health", (req, res) => {
-    res.json({ ok: true });
+async function cacheGet(key) {
+    if (!redis) return null;
+    try {
+        const value = await redis.get(key);
+        if (!value) return null;
+
+        if (typeof value === "string") {
+            try {
+                return JSON.parse(value);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        return value;
+    } catch (err) {
+        return null;
+    }
+}
+
+
+async function cacheSet(key, value, ttlSeconds) {
+    if (!redis) return;
+    try {
+        await redis.set(key, value, { ex: ttlSeconds });
+    } catch (err) {
+        // fail open
+    }
+}
+
+app.get("/health", async (req, res) => {
+    let redisStatus = "disabled";
+
+    if (redis) {
+        try {
+            await redis.ping();
+            redisStatus = "ok";
+        } catch (err) {
+            redisStatus = "error";
+        }
+    }
+
+    res.json({ ok: true, redis: redisStatus });
 });
 
-app.get("/v1/articles", async (req, res) => {
+
+app.get("/v1/articles", publicLimiter, async (req, res) => {    const cacheKey = `articles:${req.query.category || "all"}:${req.query.limit || "50"}`;
+    const cached = await cacheGet(cacheKey);
+    if (cached) {
+        return res.json(cached);
+    }
+
+
     try {
         const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
         const category = req.query.category;
 
         // Frontend slug -> DB slug
-        const slugMap = {
-            "market-news": "markets",
-            "nft-news": "nfts",
-            "crypto-currents": "altcoins",
-            "defi-and-dapps": "defi",
-            "regulation-policy": "regulation",
-            "ai-insights": "ai-crypto",
-            "web3": "builders",
-            "blockchain": "builders",
-        };
-
-        const resolvedCategory = category ? (slugMap[category] || category) : null;
+        const resolvedCategory = category || null;
 
         if (resolvedCategory) {
             const { rows } = await pool.query(
@@ -70,7 +117,10 @@ app.get("/v1/articles", async (req, res) => {
         `,
                 [resolvedCategory, limit]
             );
-            return res.json({ ok: true, items: rows });
+                        const response = { ok: true, items: rows };
+            await cacheSet(cacheKey, response, 30);
+            return res.json(response);
+
         }
 
         const { rows } = await pool.query(
@@ -90,7 +140,10 @@ app.get("/v1/articles", async (req, res) => {
             [limit]
         );
 
-        return res.json({ ok: true, items: rows });
+                    const response = { ok: true, items: rows };
+            await cacheSet(cacheKey, response, 30);
+            return res.json(response);
+
     } catch (err) {
         console.error("GET /v1/articles failed", err);
         return res.status(500).json({ ok: false, error: "server_error" });
