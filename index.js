@@ -107,7 +107,12 @@ app.get("/v1/articles", publicLimiter, async (req, res) => {    const cacheKey =
           a.canonical_url,
           a.published_at,
           a.created_at,
-          s.name AS source_name
+          s.name AS source_name,
+          a.image_url,
+          a.ai_headline,
+          a.ai_summary
+
+
         FROM articles a
         JOIN sources s ON s.id = a.source_id
         JOIN categories c ON c.id = s.category_id
@@ -131,7 +136,12 @@ app.get("/v1/articles", publicLimiter, async (req, res) => {    const cacheKey =
         a.canonical_url,
         a.published_at,
         a.created_at,
-        s.name AS source_name
+        s.name AS source_name,
+        a.image_url,
+        a.ai_headline,
+        a.ai_summary
+
+
       FROM articles a
       JOIN sources s ON s.id = a.source_id
       ORDER BY COALESCE(a.published_at, a.created_at) DESC
