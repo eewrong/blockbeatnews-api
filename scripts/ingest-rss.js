@@ -1,4 +1,8 @@
-require("dotenv").config();
+// Load .env locally if present. Render provides env vars directly.
+try {
+  require("dotenv").config();
+} catch (e) {}
+
 const Parser = require("rss-parser");
 const pg = require("pg");
 
