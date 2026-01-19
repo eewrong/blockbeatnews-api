@@ -154,12 +154,24 @@ async function run() {
       }
     }
 
-    console.log("Ingestion complete");
-  } finally {
-    client.release();
-    await pool.end();
-  }
+      console.log("Ingestion complete");
+
+  // --- Retention: delete articles older than 10 days ---
+  const retentionResult = await client.query(`
+    DELETE FROM articles
+    WHERE COALESCE(published_at, created_at) < NOW() - INTERVAL '20 days'
+  `);
+
+  console.log(
+    `[retention] deleted ${retentionResult.rowCount} articles older than 20 days`
+  );
+
+} finally {
+  client.release();
+  await pool.end();
 }
+}
+
 
 run().catch((err) => {
   console.error(err);
