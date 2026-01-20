@@ -118,43 +118,32 @@ async function run() {
         const inserted = rows[0]?.inserted;
 
         if (articleId && inserted) {
-          setImmediate(async () => {
-            try {
-              const ai = await generateAISummary({
-                title: item.title.trim(),
-                url: cleanUrl,
-                content:
-                  item.content ||
-                  item["content:encoded"] ||
-                  item.contentSnippet ||
-                  item.summary ||
-                  item.description ||
-                  "",
-              });
+  try {
+    const ai = await generateAISummary({
+      title: item.title.trim(),
+      url: cleanUrl,
+      content:
+        item.content ||
+        item["content:encoded"] ||
+        item.contentSnippet ||
+        item.summary ||
+        item.description ||
+        "",
+    });
 
-              if (!ai) return;
-
-              const db2 = new pg.Pool({
-                connectionString: process.env.DATABASE_URL,
-                ssl: { rejectUnauthorized: false },
-              });
-
-              try {
-                await db2.query(
-                  `UPDATE articles
-                   SET ai_headline = $1,
-                       ai_summary  = $2
-                   WHERE id = $3`,
-                  [ai.ai_headline, ai.ai_summary, articleId]
-                );
-              } finally {
-                await db2.end();
-              }
-            } catch (e) {
-              console.log("AI update failed:", e.message);
-            }
-          });
-        }
+    if (ai) {
+      await client.query(
+        `UPDATE articles
+         SET ai_headline = $1,
+             ai_summary  = $2
+         WHERE id = $3`,
+        [ai.ai_headline, ai.ai_summary, articleId]
+      );
+    }
+  } catch (e) {
+    console.log("AI update failed:", e.message);
+  }
+}
       }
     }
 
