@@ -9,7 +9,24 @@ const pg = require("pg");
 
 const { generateAISummary } = require("../lib/aiSummary.js");
 
-function pickImageUrl(item) {
+async function fetchOgImage(url) {
+  try {
+    const res = await fetch(url, { redirect: "follow" });
+    if (!res.ok) return null;
+
+    const html = await res.text();
+
+    const match =
+      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+
+    return match ? match[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function pickImageUrl(item) {
   const enc = item?.enclosure;
   if (enc && typeof enc.url === "string" && enc.url.trim()) return enc.url.trim();
 
@@ -48,8 +65,16 @@ function pickImageUrl(item) {
     return imageField.url.trim();
   }
 
+  // AMBCrypto fallback: try og:image from article page
+  const link = item?.link || item?.guid;
+  if (typeof link === "string" && link.includes("ambcrypto.com")) {
+    const og = await fetchOgImage(link);
+    if (typeof og === "string" && og.trim()) return og.trim();
+  }
+
   return null;
 }
+
 
 function canonicaliseUrl(raw) {
   try {
@@ -115,7 +140,7 @@ async function run() {
       for (const item of feed.items) {
         if (!item.link || !item.title) continue;
 
-        const imageUrl = pickImageUrl(item);
+        const imageUrl = await pickImageUrl(item);
         const cleanUrl = canonicaliseUrl(item.link);
 
         const { rows } = await client.query(
