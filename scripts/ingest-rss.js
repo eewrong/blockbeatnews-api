@@ -9,22 +9,89 @@ const pg = require("pg");
 
 const { generateAISummary } = require("../lib/aiSummary.js");
 
-async function fetchOgImage(url) {
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function shouldOgFallbackForLink(link) {
+  if (typeof link !== "string" || !link.trim()) return false;
+
+  let host;
   try {
-    const res = await fetch(url, { redirect: "follow" });
+    host = new URL(link).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return false;
+  }
+
+  const ALLOW = new Set([
+    "ambcrypto.com",
+    "coindesk.com",
+    "theblock.co",
+    "news.bitcoin.com",
+    "newsbtc.com",
+    "cryptobriefing.com",
+    "coinjournal.net",
+    "beincrypto.com",
+  ]);
+
+  return ALLOW.has(host);
+}
+
+async function fetchOgImage(pageUrl) {
+  try {
+    // Small throttle to reduce burst load/timeouts when many items lack RSS images
+    await sleep(120);
+
+    const res = await fetch(pageUrl, {
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; BlockbeatNewsBot/1.0; +https://blockbeatnews.com)",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-GB,en;q=0.9",
+      },
+    });
+
     if (!res.ok) return null;
 
     const html = await res.text();
 
-    const match =
-      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-      html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+    // Support both attribute orders + secure_url variants
+    const patterns = [
+      /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["']/i,
 
-    return match ? match[1].trim() : null;
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+
+      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
+
+      /<meta[^>]+name=["']twitter:image:src["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image:src["']/i,
+    ];
+
+    let img = null;
+    for (const re of patterns) {
+      const m = html.match(re);
+      if (m && m[1]) {
+        img = m[1].trim();
+        break;
+      }
+    }
+    if (!img) return null;
+
+    // Resolve relative URLs
+    try {
+      return new URL(img, pageUrl).toString();
+    } catch {
+      return img;
+    }
   } catch {
     return null;
   }
 }
+
 
 async function pickImageUrl(item) {
   const enc = item?.enclosure;
@@ -66,13 +133,12 @@ async function pickImageUrl(item) {
     return imageField.url.trim();
   }
 
-  // AMBCrypto fallback: try og:image from article page
-  const link = item?.link || item?.guid;
-  if (typeof link === "string" && link.includes("ambcrypto.com")) {
-    const og = await fetchOgImage(link);
-    console.log("[amb og:image]", link, "=>", og);
-    if (typeof og === "string" && og.trim()) return og.trim();
-  }
+  // Fallback: try og:image from article page for selected publishers
+const link = item?.link || item?.guid;
+if (shouldOgFallbackForLink(link)) {
+  const og = await fetchOgImage(link);
+  if (typeof og === "string" && og.trim()) return og.trim();
+}
 
   return null;
 }
