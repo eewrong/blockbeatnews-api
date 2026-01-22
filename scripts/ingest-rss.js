@@ -40,6 +40,7 @@ async function pickImageUrl(item) {
     const url = mediaContent?.$?.url || mediaContent?.url;
     if (typeof url === "string" && url.trim()) return url.trim();
   }
+  
 
   const mediaThumb = item?.["media:thumbnail"];
   if (Array.isArray(mediaThumb)) {
@@ -55,7 +56,7 @@ async function pickImageUrl(item) {
   const itunesImg = item?.["itunes:image"]?.href || item?.["itunes:image"]?.url;
   if (typeof itunesImg === "string" && itunesImg.trim()) return itunesImg.trim();
 
-  const imageField = item?.image?.url || item?.image;
+    const imageField = item?.image?.url || item?.image;
   if (typeof imageField === "string" && imageField.trim()) return imageField.trim();
   if (
     typeof imageField === "object" &&
@@ -69,6 +70,7 @@ async function pickImageUrl(item) {
   const link = item?.link || item?.guid;
   if (typeof link === "string" && link.includes("ambcrypto.com")) {
     const og = await fetchOgImage(link);
+    console.log("[amb og:image]", link, "=>", og);
     if (typeof og === "string" && og.trim()) return og.trim();
   }
 
