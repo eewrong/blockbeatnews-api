@@ -7,8 +7,6 @@ try {
 const Parser = require("rss-parser");
 const pg = require("pg");
 
-const { generateAISummary } = require("../lib/aiSummary.js");
-
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -228,41 +226,15 @@ async function run() {
           ]
         );
 
+                // Keep these if you want logs later; otherwise safe to remove
         const articleId = rows[0]?.id;
         const inserted = rows[0]?.inserted;
 
-        // Only run AI for newly inserted items
-        if (articleId && inserted) {
-          try {
-            const ai = await generateAISummary({
-              title: item.title.trim(),
-              url: cleanUrl,
-              content:
-                item.content ||
-                item["content:encoded"] ||
-                item.contentSnippet ||
-                item.summary ||
-                item.description ||
-                "",
-            });
-
-            if (ai) {
-              await client.query(
-                `UPDATE articles
-                 SET ai_headline = $1,
-                     ai_summary  = $2
-                 WHERE id = $3`,
-                [ai.ai_headline, ai.ai_summary, articleId]
-              );
-            }
-          } catch (e) {
-            console.log("AI update failed:", e.message);
-          }
-        }
-      }
-    }
+      } // end feed.items loop
+    } // end sources loop
 
     console.log("Ingestion complete");
+
 
     // Run retention once (shard 0 only) so you do not double-delete / double-work
     if (shard === 0) {
