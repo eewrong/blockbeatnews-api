@@ -30,6 +30,17 @@ function shouldOgFallbackForLink(link) {
     "cryptobriefing.com",
     "coinjournal.net",
     "beincrypto.com",
+    "financefeeds.com",
+    "99bitcoins.com",
+    "blockchainreporter.net",
+    "nftcalendar.io",   
+    "u.today",
+    "coingeek.com",
+    "coingape.com",
+    "bitcoinist.com",
+    "coinidol.com",
+    "artificialintelligence-news.com",
+    "wired.com",
   ]);
 
   return ALLOW.has(host);
